@@ -1,0 +1,16 @@
+pandas
+numpy
+networkx
+streamlit
+plotly
+matplotlib
+scikit-learn
+requests
+beautifulsoup4
+urllib3
+tqdm
+nltk
+fastapi
+uvicorn
+pydantic
+openpyxl

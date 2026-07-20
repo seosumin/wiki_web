@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environments
+venv/
+.venv/
+
+# Analysis runs (data output)
+runs/
+runs 2/
+
+# Archives
+runs.zip
+wiki_api.zip
+
+# Logs
+error_log.txt
+
+# IDE
+.idea/
+
+# Claude
+.claude/
+
+# macOS
+.DS_Store
