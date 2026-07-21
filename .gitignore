@@ -24,5 +24,10 @@ error_log.txt
 # Claude
 .claude/
 
+# Secrets / local DB (절대 커밋 금지)
+.streamlit/secrets.toml
+*.db
+edu.db
+
 # macOS
 .DS_Store

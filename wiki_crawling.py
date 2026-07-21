@@ -583,14 +583,21 @@ def _parse_see_also(wikitext):
     if not match:
         return []
     section = match.group(1)
+    # 1) 일반 위키링크 [[Page|Display]]
     raw_links = re.findall(r'\[\[([^\]]+)\]\]', section)
+    # 2) {{Annotated link|Page}} 템플릿 (ChatGPT 등 최신 문서가 See also에 널리 사용).
+    #    첫 번째 인자가 대상 문서명. 이걸 못 뽑으면 확장이 시드 1개로 끝난다.
+    raw_links += re.findall(r'\{\{\s*[Aa]nnotated link\s*\|\s*([^|}\n]+)', section)
     results = []
+    seen = set()
     for link in raw_links:
         target = link.split("|")[0].strip()   # [[Page|Display]] → Page
         target = target.split("#")[0].strip()  # [[Page#Section]] → Page
         if not target or ":" in target:        # Category:, File: 등 네임스페이스 제외
             continue
-        results.append(target)
+        if target not in seen:                  # 중복 제거
+            seen.add(target)
+            results.append(target)
     return results
 
 

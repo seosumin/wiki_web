@@ -247,6 +247,20 @@ def filter_network(
         print(f"경고: 필터로 {drop_ratio:.1%} 제거 감지 → 룰 스킵")
         keep_mask[:] = True
 
+    # 'List of ...' / 'Lists of ...' 문서 제외 (세이프가드와 무관하게 항상 적용).
+    # 위키의 목록성 문서는 유망아이템 분석에서 노이즈라 시드/연관 양쪽 다 제거.
+    def _is_list_title(s) -> bool:
+        s = str(s).strip().lower()
+        return s.startswith("list ") or s.startswith("lists ") \
+            or s.startswith("list of") or s.startswith("lists of")
+
+    list_mask = ~df[col_to].map(_is_list_title) & ~(
+        df[col_from].map(_is_list_title) & (df[col_from].str.lower() != seed_norm))
+    n_list = int((~list_mask).sum())
+    if n_list:
+        print(f"'List of…' 문서 {n_list}개 엣지 제외")
+    keep_mask = keep_mask & list_mask
+
     result = df[keep_mask].copy()
 
     # 자기루프 제거 + 중복 통합
