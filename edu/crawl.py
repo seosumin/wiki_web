@@ -37,6 +37,66 @@ def crawl_busy() -> bool:
         return False
     return True
 
+
+# --- 백그라운드 작업(job) 관리: 중지 버튼 지원 -----------------------
+# Streamlit은 동기 크롤 중 스크립트가 블록돼 버튼을 못 받으므로,
+# 크롤을 별도 스레드로 돌리고 stop Event를 콜백에서 확인해 협조적으로 중단한다.
+_JOBS: Dict[str, Dict[str, Any]] = {}
+_JOBS_LOCK = threading.Lock()
+
+
+class CrawlStopped(BaseException):
+    """사용자 중지. BaseException 상속 → 파이프라인의 except Exception에 안 걸리고 전파."""
+
+
+def start_crawl_job(run_id: str, seed: str, n_depth: int = 1) -> None:
+    """백그라운드 스레드로 크롤 시작. 진행/로그/상태를 _JOBS[run_id]에 기록."""
+    stop = threading.Event()
+    job: Dict[str, Any] = {"stop": stop, "logs": [], "step": (0, CRAWL_TOTAL, "대기 중…"),
+                           "status": "running", "error": None}
+    with _JOBS_LOCK:
+        _JOBS[run_id] = job
+
+    def _prog(s, t, m):
+        if stop.is_set():
+            raise CrawlStopped()
+        job["step"] = (s, t, m)
+        job["logs"].append(f"[{s}/{t}] {CRAWL_STEP_NAMES.get(s, '')} — {m}")
+
+    def _det(ev, data):
+        if stop.is_set():
+            raise CrawlStopped()
+        job["logs"].append(f"    · {fmt_detail(ev, data or {})}")
+
+    def _worker():
+        try:
+            run_crawl(run_id, seed, n_depth, progress=_prog, detail=_det)
+            job["status"] = "done"
+        except CrawlStopped:
+            job["status"] = "stopped"
+            job["logs"].append("⛔ 사용자 중지")
+            store.set_run_status(run_id, "error")
+        except BaseException as exc:  # noqa
+            job["status"] = "error"
+            job["error"] = str(exc)
+            store.set_run_status(run_id, "error")
+
+    th = threading.Thread(target=_worker, daemon=True)
+    job["thread"] = th
+    th.start()
+
+
+def stop_crawl_job(run_id: str) -> None:
+    with _JOBS_LOCK:
+        j = _JOBS.get(run_id)
+    if j:
+        j["stop"].set()
+
+
+def get_job(run_id: str) -> Optional[Dict[str, Any]]:
+    with _JOBS_LOCK:
+        return _JOBS.get(run_id)
+
 # 원본 파이프라인의 7단계 (진행 표시용)
 CRAWL_STEP_NAMES: Dict[int, str] = {
     1: "시드 확인", 2: "네트워크 확장", 3: "네트워크 필터링",

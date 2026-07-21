@@ -253,37 +253,42 @@ if cfg.get("kind") == "crawl":
                f"(확장 차수 n={cfg.get('n_depth', 1)})")
 
     has_result = store.has_artifact(run_id, "summary")
+    job = crawl.get_job(run_id)
+    running = job is not None and job.get("status") == "running"
+
+    # --- 진행 중: 프래그먼트로 자동 새로고침 + 중지 버튼 ---
+    if running:
+        @st.fragment(run_every="1.5s")
+        def _crawl_progress():
+            j = crawl.get_job(run_id)
+            if j is None:
+                return
+            s, t, m = j.get("step", (0, 1, ""))
+            st.progress(int(s / t * 100) if t else 0, text=f"[{s}/{t}] {m}")
+            if st.button("⛔ 수집 중지", key="stop_crawl", type="secondary"):
+                crawl.stop_crawl_job(run_id)
+                st.toast("중지 요청 — 현재 작업을 마치는 대로 멈춥니다…")
+            st.code("\n".join(j.get("logs", [])[-25:]) or "시작 중…")
+            if j.get("status") != "running":
+                st.rerun()   # 완료/중지/에러 → 전체 리런하여 결과 표시
+        _crawl_progress()
+        st.stop()
+
+    # --- 시작 버튼 (미실행 상태) ---
     btn_label = "▶ 수집 실행 (수 분 소요)" if not has_result else "🔄 다시 수집"
     if st.button(btn_label, type="primary"):
         if crawl.crawl_busy():
-            st.info("⏳ 지금 다른 사용자가 수집 중입니다. 순서가 되면 자동으로 시작됩니다 "
-                    "(한 번에 한 명씩 수집).")
-        bar = st.progress(0, text="시작…")
-        log_area = st.empty()
-        logs: list = []
-
-        def _push(line: str):
-            logs.append(line)
-            log_area.code("\n".join(logs[-25:]))  # 최근 25줄 스크롤 로그
-
-        def _cprog(s, t, m):
-            name = crawl.CRAWL_STEP_NAMES.get(s, "")
-            bar.progress(int(s / t * 100), text=f"[{s}/{t}] {name}")
-            _push(f"[{s}/{t}] {name} — {m}")
-
-        def _cdetail(ev, data):
-            _push(f"    · {crawl.fmt_detail(ev, data)}")
-
-        try:
-            with st.spinner("크롤링 중… (한 번에 한 명씩 · XTools 수집이 가장 오래 걸립니다)"):
-                crawl.run_crawl(run_id, seed_text, cfg.get("n_depth", 1),
-                                progress=_cprog, detail=_cdetail)
-            bar.progress(100, text="완료")
-            st.success("수집 완료!")
-        except Exception as exc:
-            store.set_run_status(run_id, "error")
-            st.error(f"수집 실패: {exc}")
+            st.info("⏳ 지금 다른 사용자가 수집 중입니다. 순서가 되면 자동으로 시작됩니다.")
+        crawl.start_crawl_job(run_id, seed_text, cfg.get("n_depth", 1))
         st.rerun()
+
+    # --- 직전 작업 결과 메시지 ---
+    if job and job.get("status") == "stopped":
+        st.warning("⛔ 수집이 중지되었습니다.")
+    elif job and job.get("status") == "error":
+        st.error(f"수집 실패: {job.get('error')}")
+    elif job and job.get("status") == "done":
+        st.success("수집 완료!")
 
     if has_result:
         seed = store.load_json(run_id, "seed", {})
