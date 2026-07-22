@@ -2,7 +2,7 @@
 """
 LLM 보고서 생성 — 종합 스코어링 결과를 읽어 '유망아이템 발굴 보고서'를 작성.
 
-- 로컬 vLLM(OpenAI 호환) 엔드포인트를 requests로 직접 호출 → 'openai' 패키지 불필요.
+- 로컬 LLM(Ollama 등, OpenAI 호환) 엔드포인트를 requests로 직접 호출 → 'openai' 패키지 불필요.
 - LLM 미가동/오류 시에도 데모가 멈추지 않도록 데이터 기반 폴백 보고서를 항상 제공.
 """
 from __future__ import annotations

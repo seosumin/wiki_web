@@ -36,14 +36,14 @@ def is_sqlite() -> bool:
 
 
 def llm_base_url() -> str:
-    """로컬 vLLM(OpenAI 호환) 엔드포인트."""
-    return _secret("llm", "base_url") or "http://localhost:8005/v1"
+    """로컬 LLM(OpenAI 호환) 엔드포인트. 기본값은 Ollama."""
+    return _secret("llm", "base_url") or "http://localhost:11434/v1"
 
 
 def llm_model() -> str:
-    return _secret("llm", "model") or "Qwen/Qwen3-8B"
+    return _secret("llm", "model") or "qwen3:8b"
 
 
 def llm_api_key() -> str:
-    # vLLM 은 보통 임의 키 허용
+    # Ollama/vLLM 은 보통 임의 키 허용
     return _secret("llm", "api_key") or "EMPTY"
