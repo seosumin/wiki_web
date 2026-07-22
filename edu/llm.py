@@ -2,7 +2,7 @@
 """
 LLM 보고서 생성 — 종합 스코어링 결과를 읽어 '유망아이템 발굴 보고서'를 작성.
 
-- OpenAI 호환 엔드포인트(config.llm_base_url) 사용 → 로컬 vLLM/게이트웨이 모두 대응.
+- 로컬 vLLM(OpenAI 호환) 엔드포인트를 requests로 직접 호출 → 'openai' 패키지 불필요.
 - LLM 미가동/오류 시에도 데모가 멈추지 않도록 데이터 기반 폴백 보고서를 항상 제공.
 """
 from __future__ import annotations
@@ -94,28 +94,39 @@ def _fallback_report(seed: Dict[str, Any], summary: pd.DataFrame) -> str:
 
 
 def generate_report(seed: Dict[str, Any], summary: pd.DataFrame) -> Tuple[str, str]:
-    """(보고서 마크다운, 사용 모델명) 반환. LLM 실패 시 폴백."""
+    """(보고서 마크다운, 사용 모델명) 반환. LLM 실패 시 폴백.
+
+    로컬 vLLM(OpenAI 호환)을 requests로 직접 호출 → 'openai' 패키지 불필요.
+    """
+    import requests
+
     rows = _rows_for_prompt(summary)
+    model = config.llm_model()
+    # base_url 은 '.../v1' 형태 → chat/completions 엔드포인트 조립
+    url = config.llm_base_url().rstrip("/") + "/chat/completions"
+    payload: Dict[str, Any] = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": _build_prompt(seed, rows)},
+        ],
+        "temperature": 0.4,
+        "max_tokens": 1800,
+    }
+    # Qwen3 계열은 기본 thinking 모드 → 보고서에 추론 텍스트가 섞이지 않도록 비활성화
+    if "qwen" in model.lower():
+        payload["chat_template_kwargs"] = {"enable_thinking": False}
     try:
-        from openai import OpenAI
-        client = OpenAI(base_url=config.llm_base_url(), api_key=config.llm_api_key(), timeout=90)
-        model = config.llm_model()
-        kwargs: Dict[str, Any] = dict(
-            model=model,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": _build_prompt(seed, rows)},
-            ],
-            temperature=0.4,
-            max_tokens=1800,
+        resp = requests.post(
+            url,
+            json=payload,
+            headers={"Authorization": f"Bearer {config.llm_api_key()}"},
+            timeout=90,
         )
-        # Qwen3 계열은 기본 thinking 모드 → 보고서에 추론 텍스트가 섞이지 않도록 비활성화
-        if "qwen" in model.lower():
-            kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
-        resp = client.chat.completions.create(**kwargs)
-        content = _clean(resp.choices[0].message.content or "")
+        resp.raise_for_status()
+        content = _clean(resp.json()["choices"][0]["message"]["content"] or "")
         if content:
             return content, model
-    except Exception as exc:  # 엔드포인트 미가동/네트워크/의존성 등
+    except Exception as exc:  # 엔드포인트 미가동/네트워크/응답형식 등
         print(f"[llm] LLM 호출 실패 → 폴백 보고서 사용: {exc}")
     return _fallback_report(seed, summary), "fallback"

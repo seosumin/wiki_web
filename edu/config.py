@@ -37,7 +37,7 @@ def is_sqlite() -> bool:
 
 def llm_base_url() -> str:
     """로컬 vLLM(OpenAI 호환) 엔드포인트."""
-    return _secret("llm", "base_url") or "http://localhost:8000/v1"
+    return _secret("llm", "base_url") or "http://localhost:8005/v1"
 
 
 def llm_model() -> str:
