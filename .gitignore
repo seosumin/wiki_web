@@ -31,3 +31,4 @@ edu.db
 
 # macOS
 .DS_Store
+.ipynb_checkpoints/
